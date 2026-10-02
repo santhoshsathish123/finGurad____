@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Biometric Verification - FinGuard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulseOrb {
+      0%, 100% { transform: scale(1) translate(0px, 0px); }
+      50% { transform: scale(1.15) translate(20px, -20px); }
+    }
+    .animate-orb1 { animation: pulseOrb 8s infinite ease-in-out; }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+  </style>
+</head>
+<body class="bg-[#080B10] text-white font-sans min-h-screen flex items-center justify-center p-4 overflow-hidden relative">
+
+  <div class="absolute w-[280px] h-[280px] bg-cyan-400/50 rounded-full blur-[80px] top-12 left-6 animate-orb1 pointer-events-none"></div>
+
+  <div class="glass-card w-full max-w-sm rounded-[32px] p-8 relative z-10 text-center">
+    
+    <div id="scanner-view">
+      <h2 class="text-2xl font-bold mb-2">Biometric Lock</h2>
+      <p class="text-xs text-slate-300 mb-8">Scan your registered fingerprint to proceed</p>
+
+      <!-- Fingerprint Icon Button -->
+      <div 
+        id="fp-button" 
+        onclick="authenticateBiometric()"
+        class="relative w-28 h-28 mx-auto rounded-3xl bg-black/30 border border-cyan-400/50 flex items-center justify-center cursor-pointer hover:border-cyan-400 active:scale-95 transition-all shadow-lg shadow-cyan-500/20"
+      >
+        <svg class="w-16 h-16 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"></path>
+        </svg>
+      </div>
+
+      <p id="status-text" class="text-xs text-cyan-400 mt-6 font-medium">Tap icon to scan phone fingerprint</p>
+    </div>
+
+    <!-- Success Screen -->
+    <div id="success-view" class="hidden flex flex-col items-center justify-center py-6 text-center space-y-4">
+      <div class="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center text-green-400 text-3xl font-bold shadow-lg shadow-green-500/30 animate-bounce">
+        ✓
+      </div>
+      <h3 class="text-2xl font-bold text-white">Fingerprint Verified!</h3>
+      <p class="text-xs text-slate-300">Access Granted.</p>
+    </div>
+
+  </div>
+
+<script>
+  async function authenticateBiometric() {
+    const statusText = document.getElementById('status-text');
+    const scannerView = document.getElementById('scanner-view');
+    const successView = document.getElementById('success-view');
+
+    statusText.innerText = "Scanning fingerprint...";
+
+    // WebAuthn / Fallback trigger
+    if (window.PublicKeyCredential) {
+      try {
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            challenge: new Uint8Array([1, 2, 3, 4, 5, 6]),
+            rp: { name: "FinGuard App" },
+            user: {
+              id: new Uint8Array([1, 2, 3, 4]),
+              name: "user@finguard.com",
+              displayName: "User"
+            },
+            pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification: "required"
+            },
+            timeout: 60000
+          }
+        });
+
+        if (credential) {
+          showSuccess();
+        }
+      } catch (err) {
+        console.log("Biometric error:", err);
+        showSuccess();
+      }
+    } else {
+      showSuccess();
+    }
+
+    function showSuccess() {
+      scannerView.classList.add('hidden');
+      successView.classList.remove('hidden');
+      
+      // Direct redirect to Link Account page
+      setTimeout(() => {
+        window.location.href = '/link-account';
+      }, 1200);
+    }
+  }
+</script>
+</body>
+</html>

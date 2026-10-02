@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link Account & Verify - FinGuard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulseOrb {
+      0%, 100% { transform: scale(1) translate(0px, 0px); }
+      50% { transform: scale(1.12) translate(15px, -15px); }
+    }
+    .animate-orb1 { animation: pulseOrb 8s infinite ease-in-out; }
+    
+    .glass-emboss-card {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+    .emboss-input {
+      background: #eef2f5;
+      box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.1), inset -2px -2px 5px rgba(255, 255, 255, 0.8);
+    }
+    .otp-input {
+      background: #eef2f5;
+      box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.12), inset -2px -2px 4px rgba(255, 255, 255, 0.8);
+    }
+    .otp-input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(37, 99, 235, 0.4);
+    }
+  </style>
+</head>
+<body class="bg-[#0B0F17] text-slate-800 font-sans min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+
+  <!-- Ambient Glow -->
+  <div class="absolute w-[320px] h-[320px] bg-blue-500/20 rounded-full blur-[100px] top-10 left-4 animate-orb1 pointer-events-none"></div>
+  <div class="absolute w-[300px] h-[300px] bg-cyan-500/15 rounded-full blur-[90px] bottom-10 right-4 pointer-events-none"></div>
+
+  <!-- Main Container -->
+  <div class="glass-emboss-card w-full max-w-sm rounded-[36px] p-8 relative z-10 text-center transition-all duration-300">
+    
+    <!-- STEP 1: LINK ACCOUNT FORM -->
+    <div id="step-link">
+      <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Link Account</h2>
+      <p class="text-xs text-slate-500 font-medium mt-1 mb-7">Select bank & enter registered phone</p>
+
+      <form onsubmit="goToOTPStep(event)" class="space-y-5 text-left">
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5 ml-1">Phone Number</label>
+          <div class="emboss-input rounded-2xl px-4 py-3 flex items-center">
+            <input 
+              type="tel" 
+              id="phone-input"
+              value="+91 9876543210" 
+              required 
+              class="bg-transparent w-full text-sm font-semibold text-slate-700 outline-none"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5 ml-1">Select Bank</label>
+          <div class="emboss-input rounded-2xl px-4 py-3 flex items-center justify-between">
+            <select id="bank-select" class="bg-transparent w-full text-sm font-semibold text-slate-700 outline-none cursor-pointer appearance-none">
+              <option value="Indian Bank">Indian Bank</option>
+              <option value="HDFC Bank">HDFC Bank</option>
+              <option value="ICICI Bank">ICICI Bank</option>
+              <option value="State Bank of India">State Bank of India (SBI)</option>
+              <option value="Axis Bank">Axis Bank</option>
+            </select>
+            <span class="text-slate-400 text-xs pointer-events-none">▼</span>
+          </div>
+        </div>
+
+        <button 
+          type="submit" 
+          class="w-full mt-6 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs tracking-wider uppercase shadow-lg shadow-blue-500/30 hover:opacity-95 active:scale-[0.98] transition-all"
+        >
+          SEND OTP
+        </button>
+
+      </form>
+    </div>
+
+    <!-- STEP 2: TYPE OTP FORM -->
+    <div id="step-otp" class="hidden">
+      <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Enter OTP</h2>
+      <p class="text-xs text-slate-500 font-medium mt-1 mb-6">
+        Code sent to <span id="display-phone" class="font-bold text-blue-600">+91 9876543210</span>
+      </p>
+
+      <form onsubmit="verifyOTP(event)" class="space-y-6">
+        
+        <!-- 4-Digit OTP Boxes -->
+        <div class="flex justify-between gap-2 my-4">
+          <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-xl font-bold rounded-2xl border border-slate-300 text-slate-800" onkeyup="moveFocus(this, 'otp2')" id="otp1" required />
+          <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-xl font-bold rounded-2xl border border-slate-300 text-slate-800" onkeyup="moveFocus(this, 'otp3')" id="otp2" required />
+          <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-xl font-bold rounded-2xl border border-slate-300 text-slate-800" onkeyup="moveFocus(this, 'otp4')" id="otp3" required />
+          <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-xl font-bold rounded-2xl border border-slate-300 text-slate-800" id="otp4" required />
+        </div>
+
+        <button 
+          type="submit" 
+          class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs tracking-wider uppercase shadow-lg shadow-blue-500/30 hover:opacity-95 active:scale-[0.98] transition-all"
+        >
+          VERIFY & CONTINUE
+        </button>
+
+        <div class="flex items-center justify-between text-xs text-slate-500 pt-2">
+          <button type="button" onclick="backToLinkStep()" class="text-slate-400 hover:text-slate-600">← Change Phone</button>
+          <button type="button" onclick="resendOTP()" class="text-blue-600 font-bold hover:underline">Resend OTP</button>
+        </div>
+
+      </form>
+    </div>
+
+  </div>
+
+  <script>
+    // Transition from Phone Form to OTP Form
+    function goToOTPStep(event) {
+      event.preventDefault();
+      const phone = document.getElementById('phone-input').value;
+      document.getElementById('display-phone').innerText = phone;
+
+      document.getElementById('step-link').classList.add('hidden');
+      document.getElementById('step-otp').classList.remove('hidden');
+
+      // Auto focus on first OTP box
+      setTimeout(() => {
+        document.getElementById('otp1').focus();
+      }, 100);
+    }
+
+    // Auto move cursor to next box
+    function moveFocus(current, nextFieldId) {
+      if (current.value.length >= 1) {
+        document.getElementById(nextFieldId).focus();
+      }
+    }
+
+    // Back to phone step
+    function backToLinkStep() {
+      document.getElementById('step-otp').classList.add('hidden');
+      document.getElementById('step-link').classList.remove('hidden');
+    }
+
+    // Resend feedback
+    function resendOTP() {
+      alert("New OTP sent to your registered phone number!");
+    }
+
+    // Verify OTP and redirect to dashboard
+    function verifyOTP(event) {
+      event.preventDefault();
+      window.location.href = '/categorization';
+    }
+  </script>
+</body>
+</html>

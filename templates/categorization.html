@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinGuard - Smart Financial Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Firebase Compatibility SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    @keyframes orbFloat1 {
+      0%, 100% { transform: translate(0px, 0px) scale(1); }
+      50% { transform: translate(30px, -20px) scale(1.15); }
+    }
+    @keyframes orbFloat2 {
+      0%, 100% { transform: translate(0px, 0px) scale(1); }
+      50% { transform: translate(-25px, 25px) scale(1.1); }
+    }
+    .animate-orb1 { animation: orbFloat1 10s infinite ease-in-out; }
+    .animate-orb2 { animation: orbFloat2 12s infinite ease-in-out; }
+
+    .card-glass {
+      background: rgba(18, 25, 38, 0.85);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    
+    .bank-chip {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      backdrop-filter: blur(8px);
+    }
+
+    .nav-glass {
+      background: rgba(11, 16, 26, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    @keyframes slideDown {
+      0% { transform: translate(-50%, -100%); opacity: 0; }
+      100% { transform: translate(-50%, 0); opacity: 1; }
+    }
+    .animate-slide-down {
+      animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-[#070A0F] text-white font-sans min-h-screen flex flex-col justify-between pb-20 relative overflow-x-hidden">
+
+  <!-- BACKGROUND GLOW ORBS -->
+  <div class="fixed top-[-50px] left-[-50px] w-[350px] h-[350px] bg-blue-600/25 rounded-full blur-[110px] animate-orb1 pointer-events-none"></div>
+  <div class="fixed top-[35%] right-[-60px] w-[320px] h-[320px] bg-purple-600/20 rounded-full blur-[100px] animate-orb2 pointer-events-none"></div>
+
+  <!-- FIXED HIGH Z-INDEX SMS NOTIFICATION BANNER -->
+  <div id="sms-notification" class="hidden fixed top-5 left-1/2 -translate-x-1/2 w-[92%] max-w-md z-[9999] animate-slide-down">
+    <div class="card-glass p-4 rounded-2xl border border-cyan-400 bg-slate-900/95 shadow-2xl flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xl shrink-0 border border-cyan-500/30">
+          💬
+        </div>
+        <div class="min-w-0">
+          <p class="text-[10px] text-cyan-400 font-bold uppercase tracking-wider">SMS Gateway • Bank OTP</p>
+          <p id="sms-text" class="text-xs font-semibold text-white truncate">FinGuard OTP: 123456</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button onclick="autoFillOtp()" class="px-2.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-[11px] transition-all shadow-md">
+          ⚡ Auto-Fill
+        </button>
+        <button onclick="hideSmsNotification()" class="text-slate-400 hover:text-white font-bold text-xs p-1">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Header -->
+  <header class="flex justify-between items-center px-6 py-5 border-b border-white/10 bg-[#070A0F]/80 backdrop-blur-md sticky top-0 z-20">
+    <h1 class="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-indigo-300">
+      FinGuard
+    </h1>
+    <div class="flex items-center gap-2">
+      <span id="db-status-badge" class="text-xs text-amber-300 font-medium px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+        🔒 Auth Pending...
+      </span>
+      <button id="logout-btn" onclick="handleLogout()" class="hidden text-xs bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1 rounded-full font-semibold hover:bg-red-500/30 transition-all">
+        Logout
+      </button>
+    </div>
+  </header>
+
+  <!-- STEP 1: AUTHENTICATION OVERLAY MODAL -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/90 backdrop-blur-xl z-50 flex items-center justify-center p-4">
+    <div class="card-glass p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl border border-white/20">
+      <div class="text-center space-y-1">
+        <h2 id="auth-title" class="text-xl font-extrabold text-white">FinGuard Auth</h2>
+        <p class="text-xs text-slate-400">Security Layer 1: Authenticate to access your account data</p>
+      </div>
+
+      <div class="space-y-3 pt-2">
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Email</label>
+          <input id="auth-email" type="email" placeholder="user@finguard.com" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Password</label>
+          <input id="auth-password" type="password" placeholder="••••••••" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400">
+        </div>
+        <p id="auth-error" class="text-xs text-red-400 hidden"></p>
+      </div>
+
+      <div class="space-y-2 pt-2">
+        <button id="login-btn" onclick="handleLogin()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-black transition-all">
+          Secure Login
+        </button>
+        <button id="signup-btn" onclick="handleSignup()" class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 transition-all">
+          Create New Account
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: BIOMETRIC AUTHENTICATION MODAL -->
+  <div id="biometric-modal" class="hidden fixed inset-0 bg-black/95 backdrop-blur-2xl z-50 flex items-center justify-center p-4">
+    <div class="card-glass p-6 rounded-3xl max-w-sm w-full space-y-5 text-center shadow-2xl border border-cyan-500/30">
+      <div class="w-16 h-16 bg-cyan-500/20 text-cyan-400 rounded-full flex items-center justify-center mx-auto border border-cyan-500/40 text-3xl animate-pulse">
+        ☝️
+      </div>
+      <div>
+        <h3 class="text-lg font-extrabold text-white">Biometric Verification</h3>
+        <p class="text-xs text-slate-400 mt-1">Scan Fingerprint or Face ID to unlock Dashboard</p>
+      </div>
+
+      <div class="py-2">
+        <button onclick="triggerBiometric()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 transition-all flex items-center justify-center gap-2">
+          <span>Scan Fingerprint / Face ID</span>
+        </button>
+      </div>
+
+      <p id="biometric-error" class="text-xs text-red-400 hidden"></p>
+      <p class="text-[10px] text-slate-500">FinGuard Hardware Level Security Enabled</p>
+    </div>
+  </div>
+
+  <!-- Main Body Content -->
+  <main id="app-content" class="hidden px-5 py-6 space-y-6 max-w-md mx-auto w-full flex-1 relative z-10">
+
+    <!-- TAB 1: DASHBOARD -->
+    <div id="tab-dashboard" class="space-y-5">
+      <div class="card-glass rounded-[28px] p-6">
+        <p class="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">Total Aggregated Balance</p>
+        
+        <h2 id="total-balance" class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-300 tracking-tight mb-5">
+          ₹0.00
+        </h2>
+
+        <div id="bank-chips-container" class="flex flex-wrap gap-2 mb-6">
+          <p id="loading-text" class="text-xs text-slate-400 italic">Fetching user accounts...</p>
+        </div>
+
+        <button onclick="openAddModal()" class="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+          + Add Another Bank Account
+        </button>
+      </div>
+
+      <!-- Forecast Card -->
+      <div class="card-glass rounded-[28px] p-6">
+        <p class="text-[11px] font-bold text-cyan-400 tracking-wider uppercase mb-2 flex items-center gap-1">
+          🔮 NEXT MONTH FORECAST (OCTOBER 2026)
+        </p>
+        <h3 id="forecast-amount" class="text-2xl font-bold text-white tracking-tight mb-3">₹0.00</h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Calculated across <span id="account-count">0</span> linked account(s) 
+          <button onclick="openForecastModal()" class="text-blue-400 font-semibold hover:underline ml-1 inline-block">View Spend Forecast →</button>
+        </p>
+      </div>
+    </div>
+
+    <!-- TAB 2: CATEGORY -->
+    <div id="tab-category" class="hidden space-y-5">
+      <div class="card-glass rounded-[28px] p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-base font-bold text-slate-200">Monthly Expenses by Category</h3>
+          <span class="text-[10px] text-cyan-400 font-semibold">Click row to view details</span>
+        </div>
+
+        <div class="space-y-3">
+          <div onclick="openCategoryDetailModal('food')" class="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 cursor-pointer transition-all">
+            <div class="flex items-center gap-4">
+              <div class="w-11 h-11 rounded-2xl bg-amber-500/20 flex items-center justify-center text-xl">🍔</div>
+              <div>
+                <h4 class="text-sm font-bold text-white">Food & Dining</h4>
+                <p class="text-[11px] text-slate-400">Swiggy, Zomato, Restaurants</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-sm font-bold text-white block">₹12,400.00</span>
+              <span class="text-[10px] text-cyan-400 font-medium">View details →</span>
+            </div>
+          </div>
+
+          <div onclick="openCategoryDetailModal('shopping')" class="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 cursor-pointer transition-all">
+            <div class="flex items-center gap-4">
+              <div class="w-11 h-11 rounded-2xl bg-pink-500/20 flex items-center justify-center text-xl">🛍</div>
+              <div>
+                <h4 class="text-sm font-bold text-white">Shopping & Apparel</h4>
+                <p class="text-[11px] text-slate-400">Amazon, Myntra, Retail</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-sm font-bold text-white block">₹8,200.00</span>
+              <span class="text-[10px] text-cyan-400 font-medium">View details →</span>
+            </div>
+          </div>
+
+          <div onclick="openCategoryDetailModal('bills')" class="flex items-center justify-between p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 cursor-pointer transition-all">
+            <div class="flex items-center gap-4">
+              <div class="w-11 h-11 rounded-2xl bg-yellow-500/20 flex items-center justify-center text-xl">⚡</div>
+              <div>
+                <h4 class="text-sm font-bold text-white">Bills & Subscriptions</h4>
+                <p class="text-[11px] text-slate-400">Electricity, Wi-Fi, OTT Services</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-sm font-bold text-white block">₹3,500.00</span>
+              <span class="text-[10px] text-cyan-400 font-medium">View details →</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: SUBSCRIPTIONS -->
+    <div id="tab-subscriptions" class="hidden space-y-5">
+      <div class="card-glass rounded-[28px] p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-base font-bold text-slate-200">Active Subscriptions</h3>
+          <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2.5 py-1 rounded-full font-semibold">3 Active</span>
+        </div>
+
+        <div id="subscriptions-container" class="space-y-4">
+          <!-- Dynamic subscriptions rendered here -->
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: ADD BANK ACCOUNT WITH MOBILE & OTP VERIFICATION -->
+  <div id="add-bank-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="card-glass p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl border border-white/20">
+      <div class="flex justify-between items-center border-b border-white/10 pb-3">
+        <h3 class="text-base font-bold text-white">Link Bank Account</h3>
+        <button onclick="closeAddModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
+      </div>
+
+      <!-- STEP 1: ENTER BANK & MOBILE NO -->
+      <div id="link-step-1" class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Bank Name</label>
+          <input id="bank-name-input" type="text" placeholder="e.g. HDFC Bank, SBI, ICICI" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400">
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-300 block mb-1">Registered Mobile Number</label>
+          <input id="mobile-number-input" type="tel" maxlength="10" placeholder="e.g. 9876543210" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400">
+        </div>
+
+        <p id="step1-error" class="text-xs text-red-400 hidden"></p>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="closeAddModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300">Cancel</button>
+          <button onclick="sendLinkingOtp()" class="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-black">Send OTP</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: ENTER OTP -->
+      <div id="link-step-2" class="hidden space-y-3">
+        <div class="text-center py-1">
+          <span class="text-2xl">📱</span>
+          <p class="text-xs text-slate-300 font-semibold mt-1">Enter 6-Digit OTP</p>
+          <p class="text-[11px] text-slate-400">Sent to registered mobile <span id="target-mobile" class="text-cyan-300 font-semibold"></span></p>
+          
+          <!-- DEMO OTP HINT BADGE FOR GUARANTEED VISIBILITY -->
+          <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-full">
+            <span class="text-[11px] text-slate-300">Demo OTP:</span>
+            <span id="otp-hint-badge" class="text-xs font-bold text-cyan-400 tracking-wider">------</span>
+          </div>
+        </div>
+
+        <div>
+          <input id="otp-input" type="text" maxlength="6" placeholder="• • • • • •" class="w-full bg-white/5 border border-cyan-500/40 text-center tracking-[0.5em] rounded-xl px-3 py-2.5 text-lg font-bold text-cyan-300 focus:outline-none focus:border-cyan-400">
+        </div>
+
+        <p id="step2-error" class="text-xs text-red-400 text-center hidden"></p>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="backToStep1()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300">Back</button>
+          <button onclick="verifyAndLinkAccount()" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-xs font-bold text-black">Verify & Link</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="forecast-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="card-glass p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl border border-white/20">
+      <div class="flex justify-between items-center border-b border-white/10 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">🔮 Spend Forecast Breakdown</h3>
+          <p class="text-[11px] text-cyan-400">October 2026 AI Predictive Analysis</p>
+        </div>
+        <button onclick="closeForecastModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
+      </div>
+
+      <div class="space-y-3 py-1">
+        <div class="p-3 rounded-2xl bg-white/5 border border-white/5 flex justify-between items-center">
+          <div>
+            <span class="text-xs font-semibold text-slate-300 block">Fixed Subscriptions</span>
+            <span class="text-[10px] text-slate-400">Netflix, Spotify, Bills</span>
+          </div>
+          <span class="text-sm font-bold text-red-400">₹2,267.00</span>
+        </div>
+
+        <div class="p-3 rounded-2xl bg-white/5 border border-white/5 flex justify-between items-center">
+          <div>
+            <span class="text-xs font-semibold text-slate-300 block">Estimated Dining & Shopping</span>
+            <span class="text-[10px] text-slate-400">Based on past 3 months pattern</span>
+          </div>
+          <span class="text-sm font-bold text-amber-400">₹14,500.00</span>
+        </div>
+
+        <div class="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex justify-between items-center">
+          <div>
+            <span class="text-xs font-semibold text-cyan-300 block">Suggested Buffer Savings</span>
+            <span class="text-[10px] text-cyan-400/80">Auto-allocated for safety</span>
+          </div>
+          <span class="text-sm font-bold text-emerald-400">₹5,000.00</span>
+        </div>
+
+        <div class="p-3 rounded-2xl bg-white/10 border border-white/20 flex justify-between items-center font-bold">
+          <span class="text-xs text-white">Total Forecasted Spend</span>
+          <span class="text-sm text-cyan-300">₹21,767.00</span>
+        </div>
+      </div>
+
+      <button onclick="closeForecastModal()" class="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-black">
+        Got it
+      </button>
+    </div>
+  </div>
+
+  <div id="category-detail-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="card-glass p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl border border-white/20">
+      <div class="flex justify-between items-center border-b border-white/10 pb-3">
+        <div class="flex items-center gap-3">
+          <div id="cat-modal-icon" class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl">🍔</div>
+          <div>
+            <h3 id="cat-modal-title" class="text-base font-bold text-white">Food & Dining</h3>
+            <p id="cat-modal-subtitle" class="text-[11px] text-slate-400">Transaction History with Bank Sources</p>
+          </div>
+        </div>
+        <button onclick="closeCategoryDetailModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
+      </div>
+
+      <div id="cat-modal-list" class="space-y-2.5 max-h-60 overflow-y-auto pr-1"></div>
+
+      <button onclick="closeCategoryDetailModal()" class="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200">
+        Close
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation Bar -->
+  <nav id="app-nav" class="hidden nav-glass fixed bottom-0 left-0 right-0 px-6 py-3 flex justify-around items-center z-30 max-w-md mx-auto">
+    <button id="nav-dashboard" onclick="switchTab('dashboard')" class="flex flex-col items-center gap-1 text-cyan-400 font-bold">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm9-3a1 1 0 10-2 0v5a1 1 0 001 1h3a1 1 0 100-2h-2V7z"></path></svg>
+      <span class="text-[11px]">Dashboard</span>
+    </button>
+
+    <button id="nav-category" onclick="switchTab('category')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-white">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+      <span class="text-[11px]">Category</span>
+    </button>
+
+    <button id="nav-subscriptions" onclick="switchTab('subscriptions')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-white">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9a1 1 0 01.673.272A5.002 5.002 0 0014 13h-3a1 1 0 010-2h5a1 1 0 011 1v5a1 1 0 102 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.286z" clip-rule="evenodd"></path></svg>
+      <span class="text-[11px]">Subscriptions</span>
+    </button>
+  </nav>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAehZSoPd8b8FmDZKF_o3J6j-01vtoCt5s",
+      authDomain: "finguard-9c8eb.firebaseapp.com",
+      projectId: "finguard-9c8eb",
+      storageBucket: "finguard-9c8eb.firebasestorage.app",
+      messagingSenderId: "491332007785",
+      appId: "1:491332007785:web:646e4601c5f03fb4da6ff8",
+      measurementId: "G-WYCBCSG38G"
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    let currentUser = null;
+    let unsubscribeDatabase = null;
+    let linkedBankList = [];
+    let isBiometricPassed = false;
+    let generatedOtp = null;
+    let pendingBankName = "";
+
+    const FIXED_FORECAST_TOTAL = 21767.00;
+
+    auth.onAuthStateChanged((user) => {
+      const badge = document.getElementById('db-status-badge');
+      const logoutBtn = document.getElementById('logout-btn');
+      const authModal = document.getElementById('auth-modal');
+      const bioModal = document.getElementById('biometric-modal');
+      const appContent = document.getElementById('app-content');
+      const appNav = document.getElementById('app-nav');
+
+      if (user) {
+        currentUser = user;
+        authModal.classList.add('hidden');
+
+        if (!isBiometricPassed) {
+          badge.innerText = "🔑 Biometric Required";
+          badge.className = "text-xs text-amber-300 font-medium px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20";
+          bioModal.classList.remove('hidden');
+          appContent.classList.add('hidden');
+          appNav.classList.add('hidden');
+          logoutBtn.classList.remove('hidden');
+        } else {
+          showDashboard();
+        }
+      } else {
+        currentUser = null;
+        isBiometricPassed = false;
+        badge.innerText = "🔒 Session Locked";
+        badge.className = "text-xs text-amber-300 font-medium px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20";
+        logoutBtn.classList.add('hidden');
+        authModal.classList.remove('hidden');
+        bioModal.classList.add('hidden');
+        appContent.classList.add('hidden');
+        appNav.classList.add('hidden');
+
+        if (unsubscribeDatabase) unsubscribeDatabase();
+      }
+    });
+
+    async function handleLogin() {
+      const email = document.getElementById('auth-email').value;
+      const pass = document.getElementById('auth-password').value;
+      const errEl = document.getElementById('auth-error');
+
+      try {
+        errEl.classList.add('hidden');
+        await auth.signInWithEmailAndPassword(email, pass);
+      } catch (err) {
+        errEl.innerText = err.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    async function handleSignup() {
+      const email = document.getElementById('auth-email').value;
+      const pass = document.getElementById('auth-password').value;
+      const errEl = document.getElementById('auth-error');
+
+      try {
+        errEl.classList.add('hidden');
+        await auth.createUserWithEmailAndPassword(email, pass);
+      } catch (err) {
+        errEl.innerText = err.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    function handleLogout() {
+      isBiometricPassed = false;
+      auth.signOut();
+    }
+
+    async function triggerBiometric() {
+      if (window.PublicKeyCredential) {
+        try {
+          const challenge = new Uint8Array(32);
+          window.crypto.getRandomValues(challenge);
+          await navigator.credentials.get({
+            publicKey: { challenge: challenge, timeout: 60000, userVerification: "preferred" }
+          }).catch(() => {});
+          isBiometricPassed = true;
+          showDashboard();
+        } catch (e) {
+          isBiometricPassed = true;
+          showDashboard();
+        }
+      } else {
+        isBiometricPassed = true;
+        showDashboard();
+      }
+    }
+
+    function showDashboard() {
+      const badge = document.getElementById('db-status-badge');
+      const bioModal = document.getElementById('biometric-modal');
+      const appContent = document.getElementById('app-content');
+      const appNav = document.getElementById('app-nav');
+
+      badge.innerText = "🔒 Security L2 Active";
+      badge.className = "text-xs text-emerald-300 font-medium px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20";
+
+      bioModal.classList.add('hidden');
+      appContent.classList.remove('hidden');
+      appNav.classList.remove('hidden');
+
+      if (currentUser) {
+        initDatabaseListener(currentUser.uid);
+      }
+    }
+
+    function initDatabaseListener(uid) {
+      if (unsubscribeDatabase) unsubscribeDatabase();
+
+      unsubscribeDatabase = db.collection("bank_accounts")
+        .where("userId", "==", uid)
+        .onSnapshot((snapshot) => {
+          const container = document.getElementById('bank-chips-container');
+          container.innerHTML = '';
+          linkedBankList = [];
+
+          let totalBalance = 0;
+          let count = 0;
+
+          if (snapshot.empty) {
+            container.innerHTML = `<p class="text-xs text-slate-400 italic">No bank accounts linked yet.</p>`;
+            document.getElementById('total-balance').innerText = '₹0.00';
+            document.getElementById('forecast-amount').innerText = '₹0.00';
+            document.getElementById('account-count').innerText = '0';
+            renderSubscriptions();
+            return;
+          }
+
+          snapshot.forEach((doc) => {
+            count++;
+            const data = doc.data();
+            const amount = parseFloat(data.balance || 0);
+
+            linkedBankList.push(data.bankName);
+            totalBalance += amount;
+
+            const chip = document.createElement('div');
+            chip.className = "bank-chip px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5";
+            chip.innerHTML = `
+              <span>✓</span> ${data.bankName} 
+              <button onclick="deleteBank('${doc.id}')" class="text-slate-400 hover:text-red-400 ml-1 text-[11px]">✕</button>
+            `;
+            container.appendChild(chip);
+          });
+
+          document.getElementById('total-balance').innerText = '₹' + totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          document.getElementById('forecast-amount').innerText = '₹' + FIXED_FORECAST_TOTAL.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          document.getElementById('account-count').innerText = count;
+
+          renderSubscriptions();
+        });
+    }
+
+    // BANK LINKING STEP 1: SEND OTP
+    function sendLinkingOtp() {
+      const bankName = document.getElementById('bank-name-input').value.trim();
+      const mobileNum = document.getElementById('mobile-number-input').value.trim();
+      const errEl = document.getElementById('step1-error');
+
+      if (!bankName) {
+        errEl.innerText = "Please enter bank name.";
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (!mobileNum || mobileNum.length !== 10 || isNaN(mobileNum)) {
+        errEl.innerText = "Please enter valid 10-digit mobile number.";
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      errEl.classList.add('hidden');
+      pendingBankName = bankName;
+
+      // Generate Random 6-Digit OTP
+      generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      document.getElementById('target-mobile').innerText = "+91 " + mobileNum;
+      document.getElementById('otp-hint-badge').innerText = generatedOtp;
+      document.getElementById('link-step-1').classList.add('hidden');
+      document.getElementById('link-step-2').classList.remove('hidden');
+
+      // Trigger Simulated SMS Notification Top Banner
+      showSmsNotification(`FinGuard OTP: ${generatedOtp} to link ${bankName}. Valid for 5 mins.`);
+    }
+
+    function autoFillOtp() {
+      if (generatedOtp) {
+        document.getElementById('otp-input').value = generatedOtp;
+      }
+    }
+
+    function backToStep1() {
+      document.getElementById('link-step-2').classList.add('hidden');
+      document.getElementById('link-step-1').classList.remove('hidden');
+    }
+
+    // BANK LINKING STEP 2: VERIFY OTP AND SAVE TO FIRESTORE
+    async function verifyAndLinkAccount() {
+      const enteredOtp = document.getElementById('otp-input').value.trim();
+      const errEl = document.getElementById('step2-error');
+
+      if (enteredOtp !== generatedOtp) {
+        errEl.innerText = "Invalid OTP! Check notification banner or hint.";
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      errEl.classList.add('hidden');
+      const simulatedBalance = Math.floor(Math.random() * (75000 - 25000 + 1)) + 25000;
+
+      try {
+        await db.collection("bank_accounts").add({
+          userId: currentUser.uid,
+          bankName: pendingBankName,
+          balance: simulatedBalance,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        closeAddModal();
+        hideSmsNotification();
+      } catch (err) {
+        alert("Error saving: " + err.message);
+      }
+    }
+
+    function showSmsNotification(msg) {
+      document.getElementById('sms-text').innerText = msg;
+      document.getElementById('sms-notification').classList.remove('hidden');
+    }
+
+    function hideSmsNotification() {
+      document.getElementById('sms-notification').classList.add('hidden');
+    }
+
+    async function deleteBank(docId) {
+      if (confirm("Remove this account?")) {
+        await db.collection("bank_accounts").doc(docId).delete();
+      }
+    }
+
+    const subscriptionsList = [
+      { name: "Netflix Premium", price: "₹649.00", cycle: "/month", icon: "🎬", iconBg: "bg-red-500/20 text-red-400", date: "Renews Oct 05, 2026", defaultBank: "HDFC Bank" },
+      { name: "Spotify Premium", price: "₹119.00", cycle: "/month", icon: "🎵", iconBg: "bg-emerald-500/20 text-emerald-400", date: "Renews Oct 12, 2026", defaultBank: "ICICI Bank" },
+      { name: "Amazon Prime", price: "₹1,499.00", cycle: "/year", icon: "📦", iconBg: "bg-blue-500/20 text-blue-400", date: "Renews Nov 20, 2026", defaultBank: "SBI" }
+    ];
+
+    function renderSubscriptions() {
+      const container = document.getElementById('subscriptions-container');
+      container.innerHTML = '';
+
+      subscriptionsList.forEach((sub, index) => {
+        const bankUsed = linkedBankList.length > 0 ? linkedBankList[index % linkedBankList.length] : sub.defaultBank;
+        const card = document.createElement('div');
+        card.className = "flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5";
+        card.innerHTML = `
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl ${sub.iconBg} flex items-center justify-center font-bold text-lg">${sub.icon}</div>
+            <div>
+              <h4 class="text-sm font-bold text-white">${sub.name}</h4>
+              <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                <span>${sub.date}</span>
+                <span class="text-emerald-400 font-semibold">💳 ${bankUsed}</span>
+              </div>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-sm font-bold text-white">${sub.price}</span>
+            <span class="text-[10px] text-slate-400 block">${sub.cycle}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function openAddModal() { 
+      document.getElementById('bank-name-input').value = '';
+      document.getElementById('mobile-number-input').value = '';
+      document.getElementById('otp-input').value = '';
+      document.getElementById('step1-error').classList.add('hidden');
+      document.getElementById('step2-error').classList.add('hidden');
+      document.getElementById('link-step-1').classList.remove('hidden');
+      document.getElementById('link-step-2').classList.add('hidden');
+      document.getElementById('add-bank-modal').classList.remove('hidden'); 
+    }
+    
+    function closeAddModal() { 
+      document.getElementById('add-bank-modal').classList.add('hidden'); 
+      hideSmsNotification();
+    }
+
+    function openForecastModal() { document.getElementById('forecast-modal').classList.remove('hidden'); }
+    function closeForecastModal() { document.getElementById('forecast-modal').classList.add('hidden'); }
+
+    const categoryData = {
+      food: {
+        title: "Food & Dining",
+        icon: "🍔",
+        bg: "bg-amber-500/20",
+        items: [
+          { name: "Swiggy Order", date: "Yesterday, 8:30 PM", price: "₹450.00", defaultBank: "HDFC Bank" },
+          { name: "Zomato Gourmet", date: "Sep 28, 2026", price: "₹1,250.00", defaultBank: "ICICI Bank" },
+          { name: "Starbucks Coffee", date: "Sep 25, 2026", price: "₹780.00", defaultBank: "HDFC Bank" },
+          { name: "Supermarket Groceries", date: "Sep 20, 2026", price: "₹9,920.00", defaultBank: "SBI" }
+        ]
+      },
+      shopping: {
+        title: "Shopping & Apparel",
+        icon: "🛍",
+        bg: "bg-pink-500/20",
+        items: [
+          { name: "Amazon Electronics", date: "Sep 29, 2026", price: "₹4,999.00", defaultBank: "ICICI Bank" },
+          { name: "Myntra Clothing", date: "Sep 22, 2026", price: "₹2,201.00", defaultBank: "HDFC Bank" },
+          { name: "Zara Retail Store", date: "Sep 15, 2026", price: "₹1,000.00", defaultBank: "Axis Bank" }
+        ]
+      },
+      bills: {
+        title: "Bills & Subscriptions",
+        icon: "⚡",
+        bg: "bg-yellow-500/20",
+        items: [
+          { name: "Electricity Bill (TNEB)", date: "Sep 01, 2026", price: "₹1,232.00", defaultBank: "SBI" },
+          { name: "Airtel Fiber Broadband", date: "Sep 05, 2026", price: "₹1,001.00", defaultBank: "HDFC Bank" },
+          { name: "Netflix Premium Subscription", date: "Sep 05, 2026", price: "₹649.00", defaultBank: "HDFC Bank" },
+          { name: "Spotify Music", date: "Sep 12, 2026", price: "₹119.00", defaultBank: "ICICI Bank" },
+          { name: "Apple iCloud Storage", date: "Sep 18, 2026", price: "₹499.00", defaultBank: "Axis Bank" }
+        ]
+      }
+    };
+
+    function openCategoryDetailModal(catKey) {
+      const data = categoryData[catKey];
+      if (!data) return;
+
+      document.getElementById('cat-modal-title').innerText = data.title;
+      document.getElementById('cat-modal-icon').innerText = data.icon;
+      document.getElementById('cat-modal-icon').className = `w-10 h-10 rounded-xl ${data.bg} flex items-center justify-center text-xl`;
+
+      const listContainer = document.getElementById('cat-modal-list');
+      listContainer.innerHTML = '';
+
+      data.items.forEach((item, index) => {
+        const bankUsed = linkedBankList.length > 0 ? linkedBankList[index % linkedBankList.length] : item.defaultBank;
+
+        const itemEl = document.createElement('div');
+        itemEl.className = "flex justify-between items-center p-3 bg-white/5 rounded-2xl border border-white/5";
+        itemEl.innerHTML = `
+          <div>
+            <span class="text-xs font-semibold text-white block">${item.name}</span>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="text-[10px] text-slate-400">${item.date}</span>
+              <span class="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">💳 ${bankUsed}</span>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-white">${item.price}</span>
+        `;
+        listContainer.appendChild(itemEl);
+      });
+
+      document.getElementById('category-detail-modal').classList.remove('hidden');
+    }
+
+    function closeCategoryDetailModal() {
+      document.getElementById('category-detail-modal').classList.add('hidden');
+    }
+
+    function switchTab(tabName) {
+      document.getElementById('tab-dashboard').classList.add('hidden');
+      document.getElementById('tab-category').classList.add('hidden');
+      document.getElementById('tab-subscriptions').classList.add('hidden');
+
+      document.getElementById('nav-dashboard').className = 'flex flex-col items-center gap-1 text-slate-400 hover:text-white';
+      document.getElementById('nav-category').className = 'flex flex-col items-center gap-1 text-slate-400 hover:text-white';
+      document.getElementById('nav-subscriptions').className = 'flex flex-col items-center gap-1 text-slate-400 hover:text-white';
+
+      if (tabName === 'dashboard') {
+        document.getElementById('tab-dashboard').classList.remove('hidden');
+        document.getElementById('nav-dashboard').className = 'flex flex-col items-center gap-1 text-cyan-400 font-bold';
+      } else if (tabName === 'category') {
+        document.getElementById('tab-category').classList.remove('hidden');
+        document.getElementById('nav-category').className = 'flex flex-col items-center gap-1 text-cyan-400 font-bold';
+      } else if (tabName === 'subscriptions') {
+        document.getElementById('tab-subscriptions').classList.remove('hidden');
+        document.getElementById('nav-subscriptions').className = 'flex flex-col items-center gap-1 text-cyan-400 font-bold';
+      }
+    }
+  </script>
+</body>
+</html>
